@@ -1,7 +1,9 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { Contract, Signer } from "ethers";
+import { Contract } from "ethers";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
+import { MockToken, IDOPool } from "../typechain-types";
+import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 
 // Helper function to convert to wei
 function toWei(value: number | string): bigint {
@@ -9,13 +11,13 @@ function toWei(value: number | string): bigint {
 }
 
 describe("IDOPool", function () {
-  let idoPool: Contract;
-  let paymentToken: Contract;
-  let idoToken: Contract;
-  let owner: Signer;
-  let user1: Signer;
-  let user2: Signer;
-  let addrs: Signer[];
+  let idoPool: IDOPool;
+  let paymentToken: MockToken;
+  let idoToken: MockToken;
+  let owner: HardhatEthersSigner;
+  let user1: HardhatEthersSigner;
+  let user2: HardhatEthersSigner;
+  let addrs: HardhatEthersSigner[];
 
   // Common parameters
   const tokenPrice = toWei(0.1); // 0.1 payment tokens per IDO token
@@ -26,7 +28,7 @@ describe("IDOPool", function () {
   // Deploy a mock ERC20 token
   async function deployMockToken(name: string, symbol: string) {
     const MockToken = await ethers.getContractFactory("MockToken");
-    return await MockToken.deploy(name, symbol);
+    return (await MockToken.deploy(name, symbol)) as unknown as MockToken;
   }
 
   beforeEach(async function () {
@@ -38,8 +40,11 @@ describe("IDOPool", function () {
     idoToken = await deployMockToken("IDO Token", "IDO");
 
     // Deploy IDOPool
-    const IDOPool = await ethers.getContractFactory("IDOPool");
-    idoPool = await IDOPool.deploy(paymentToken.target, idoToken.target);
+    const IDOPoolFactory = await ethers.getContractFactory("IDOPool");
+    idoPool = (await IDOPoolFactory.deploy(
+      await paymentToken.getAddress(), 
+      await idoToken.getAddress()
+    )) as unknown as IDOPool;
 
     // Mint tokens to users
     await paymentToken.mint(await user1.getAddress(), initialBalance);
@@ -49,7 +54,7 @@ describe("IDOPool", function () {
     await idoToken.mint(await owner.getAddress(), toWei(10000));
     
     // Transfer IDO tokens to pool for distribution
-    await idoToken.connect(owner).transfer(idoPool.target, toWei(5000));
+    await idoToken.connect(owner).transfer(await idoPool.getAddress(), toWei(5000));
   });
 
   describe("Deployment", function () {
@@ -58,8 +63,8 @@ describe("IDOPool", function () {
     });
 
     it("Should set the correct token addresses", async function () {
-      expect(await idoPool.paymentToken()).to.equal(paymentToken.target);
-      expect(await idoPool.idoToken()).to.equal(idoToken.target);
+      expect(await idoPool.paymentToken()).to.equal(await paymentToken.getAddress());
+      expect(await idoPool.idoToken()).to.equal(await idoToken.getAddress());
     });
   });
 
@@ -184,8 +189,8 @@ describe("IDOPool", function () {
       await idoPool.startIDO();
 
       // Approve payment token spending
-      await paymentToken.connect(user1).approve(idoPool.target, initialBalance);
-      await paymentToken.connect(user2).approve(idoPool.target, initialBalance);
+      await paymentToken.connect(user1).approve(await idoPool.getAddress(), initialBalance);
+      await paymentToken.connect(user2).approve(await idoPool.getAddress(), initialBalance);
     });
 
     it("Should allow user to buy tokens", async function () {
@@ -199,7 +204,7 @@ describe("IDOPool", function () {
       expect(await idoPool.userContributedPaymentAmount(await user1.getAddress())).to.equal(paymentAmount);
       expect(await idoPool.userOwedIDOTokens(await user1.getAddress())).to.equal(expectedIdoTokens);
       expect(await idoPool.totalRaised()).to.equal(paymentAmount);
-      expect(await paymentToken.balanceOf(idoPool.target)).to.equal(paymentAmount);
+      expect(await paymentToken.balanceOf(await idoPool.getAddress())).to.equal(paymentAmount);
     });
 
     it("Should not allow purchase exceeding hard cap", async function () {
@@ -233,7 +238,7 @@ describe("IDOPool", function () {
       await idoPool.startIDO();
 
       // User1 buys tokens
-      await paymentToken.connect(user1).approve(idoPool.target, toWei(10));
+      await paymentToken.connect(user1).approve(await idoPool.getAddress(), toWei(10));
       await idoPool.connect(user1).buyTokens(toWei(10));
     });
 
@@ -295,7 +300,7 @@ describe("IDOPool", function () {
       await idoPool.startIDO();
 
       // Users buy tokens
-      await paymentToken.connect(user1).approve(idoPool.target, softCap);
+      await paymentToken.connect(user1).approve(await idoPool.getAddress(), softCap);
       await idoPool.connect(user1).buyTokens(softCap); // Meets soft cap
     });
 
