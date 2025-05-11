@@ -41,7 +41,9 @@ function App() {
   const [countdown, setCountdown] = useState('');
 
   // Contract addresses
-  const idoPoolAddress = '<IDO_POOL_ADDRESS>'; // Replace with actual address when deployed
+  const idoPoolAddress = '0x7c33fE2D2744Afe0eb0e59577156f512d7E206DF'; 
+  const paymentTokenAddress = '0x0188F4043223fa10961CE1987ABfEE47690092D8';
+  const idoTokenAddress = '0x0188F4043223fa10961CE1987ABfEE47690092D8';
 
   // Connect to wallet
   async function connectWallet() {
@@ -60,9 +62,6 @@ function App() {
       
       // Initialize contract instances
       const idoPool = new ethers.Contract(idoPoolAddress, IDOPoolABI, signer);
-      const paymentTokenAddress = await idoPool.paymentToken();
-      const idoTokenAddress = await idoPool.idoToken();
-      
       const paymentToken = new ethers.Contract(paymentTokenAddress, ERC20ABI, signer);
       const idoToken = new ethers.Contract(idoTokenAddress, ERC20ABI, signer);
       
@@ -413,6 +412,24 @@ function App() {
       return () => clearInterval(timer);
     }
   }, [idoInfo]);
+
+  // Add auto-refresh for IDO info
+  useEffect(() => {
+    if (account && idoPool) {
+      // Initial fetch
+      fetchIdoInfo();
+      
+      // Set up recurring fetch every 10 seconds
+      const refreshTimer = setInterval(() => {
+        fetchIdoInfo();
+        if (account) {
+          fetchUserInfo(account);
+        }
+      }, 10000);
+      
+      return () => clearInterval(refreshTimer);
+    }
+  }, [account, idoPool]);
 
   return (
     <div className="App">
